@@ -1,64 +1,57 @@
-import streamlit as st
-import math
+import numpy as np
+import matplotlib.pyplot as plt
 
-st.title("📊 Nila Farming Optimizer")
-st.write("Hitung potensi hasil panen, kebutuhan pakan, biaya, dan profit berdasarkan parameter kolam.")
+# === Simulasi sensitivitas FCR & SR ===
+st.subheader("📊 Simulasi Biaya Pakan vs Profit")
 
-# === Input kolam ===
-diameter = st.number_input("Diameter kolam (m)", 1.0, 10.0, 3.0, 0.1)
-tinggi_air = st.number_input("Tinggi air (m)", 0.5, 2.0, 1.2, 0.1)
-volume = math.pi * (diameter/2)**2 * tinggi_air
-st.write(f"**Volume kolam** ≈ {volume:.2f} m³")
+fcr_values = np.linspace(1.1, 1.8, 8)  # variasi FCR
+sr_values = [80, 85, 90, 95]
 
-# === Input target ===
-kg_m3 = st.selectbox("Target biomassa (kg/m³)", [10,20,30,40], index=1)
-fish_price = st.number_input("Harga jual (Rp/kg)", 10000, 50000, 30000, 1000)
-fingerling_price = st.number_input("Harga benih (Rp/ekor)", 100, 2000, 500, 50)
-feed_price = st.number_input("Harga pakan (Rp/kg)", 5000, 20000, 12500, 500)
+results = []
+for sr_val in sr_values:
+    for fcr_val in fcr_values:
+        harvest_kg_sim = kg_m3 * volume
+        harvest_fish_sim = harvest_kg_sim*1000 / fish_size
+        stocking_sim = harvest_fish_sim / (sr_val/100)
+        feed_kg_sim = harvest_kg_sim * fcr_val
+        fry_cost_sim = stocking_sim * fingerling_price
+        feed_cost_sim = feed_kg_sim * feed_price
+        total_cost_sim = fry_cost_sim + feed_cost_sim + operational + misc
+        revenue_sim = harvest_kg_sim * fish_price
+        profit_sim = revenue_sim - total_cost_sim
+        results.append((sr_val, fcr_val, profit_sim))
 
-# === Input teknis ===
-fcr = st.slider("FCR (Feed Conversion Ratio)", 1.0, 2.0, 1.4, 0.05)
-sr = st.slider("SR (Survival Rate %)", 50, 100, 90, 1)
-fish_size = st.selectbox("Ukuran panen (gram/ekor)", [200,250,300,400,500], index=2)
+# Tampilkan tabel ringkas
+import pandas as pd
+df_sim = pd.DataFrame(results, columns=["SR (%)","FCR","Profit (Rp)"])
+st.dataframe(df_sim.pivot(index="FCR", columns="SR (%)", values="Profit (Rp)"))
 
-# === Hitung panen ===
-harvest_kg = kg_m3 * volume
-harvest_fish = harvest_kg*1000 / fish_size
-stocking = harvest_fish / (sr/100)
-feed_kg = harvest_kg * fcr
+# === Visualisasi kebutuhan pakan mingguan ===
+st.subheader("📈 Kurva Kebutuhan Pakan Mingguan")
 
-# === Biaya ===
-fry_cost = stocking * fingerling_price
-feed_cost = feed_kg * feed_price
-operational = 400_000 if kg_m3<=20 else 600_000  # probiotik/kimia
-misc = 0.1*(fry_cost+feed_cost+operational)
-total_cost = fry_cost+feed_cost+operational+misc
+weeks = 16  # asumsi 16 minggu pemeliharaan
+# Asumsi pertumbuhan linear
+weekly_growth = harvest_kg / weeks
+weekly_feed = [weekly_growth * fcr for fcr in [fcr]*weeks]
 
-# === Pendapatan & Laba ===
-revenue = harvest_kg * fish_price
-profit = revenue - total_cost
+feed_cum = np.cumsum(weekly_feed)
+weeks_range = np.arange(1, weeks+1)
 
-# === Output ===
-st.subheader("📈 Hasil Perhitungan")
-st.metric("Biomassa Panen (kg)", f"{harvest_kg:,.0f}")
-st.metric("Jumlah Panen (ekor)", f"{harvest_fish:,.0f}")
-st.metric("Benih Tebar (ekor)", f"{stocking:,.0f}")
-st.metric("Kebutuhan Pakan (kg)", f"{feed_kg:,.0f}")
+fig1, ax1 = plt.subplots()
+ax1.plot(weeks_range, feed_cum, marker="o")
+ax1.set_xlabel("Minggu")
+ax1.set_ylabel("Kumulatif Pakan (kg)")
+ax1.set_title("Kebutuhan Pakan Kumulatif per Minggu")
+st.pyplot(fig1)
 
-st.subheader("💰 Rincian Biaya")
-st.write({
-    "Biaya Benih (Rp)": int(fry_cost),
-    "Biaya Pakan (Rp)": int(feed_cost),
-    "Kimia/Probiotik (Rp)": operational,
-    "Kontinjensi 10% (Rp)": int(misc),
-    "Total Biaya (Rp)": int(total_cost)
-})
+# === Visualisasi proyeksi laba ===
+st.subheader("💹 Proyeksi Laba")
 
-st.subheader("💹 Profitabilitas")
-st.metric("Pendapatan (Rp)", f"{int(revenue):,}")
-st.metric("Laba (Rp)", f"{int(profit):,}")
+profit_per_week = (revenue - total_cost) * (weeks_range/weeks)
 
-# === Analisa singkat ===
-st.subheader("📌 Analisa")
-st.write(f"Dengan SR {sr}% dan FCR {fcr}, panen {harvest_kg:.0f} kg akan memberi laba sekitar Rp {profit:,.0f}.")
-st.write("Anda bisa menurunkan FCR atau meningkatkan SR untuk menaikkan profit.")
+fig2, ax2 = plt.subplots()
+ax2.plot(weeks_range, profit_per_week, color="green", marker="x")
+ax2.set_xlabel("Minggu")
+ax2.set_ylabel("Laba (Rp)")
+ax2.set_title("Proyeksi Laba per Minggu")
+st.pyplot(fig2)
